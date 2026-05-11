@@ -22,7 +22,9 @@ import {
   Mail,
   Phone,
   MapPin,
-  Info
+  Info,
+  ExternalLink,
+  Clock
 } from 'lucide-react'
 
 interface WhoisResultProps {
@@ -39,12 +41,12 @@ interface InfoCardProps {
 
 function InfoCard({ icon, title, children, className = '' }: InfoCardProps) {
   return (
-    <div className={`bg-white rounded-xl border border-gray-200 p-5 shadow-sm ${className}`}>
-      <div className="flex items-center gap-2 mb-4">
+    <div className={`bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow ${className}`}>
+      <div className="flex items-center gap-2.5 px-5 py-4 border-b border-gray-100">
         <div className="text-blue-600">{icon}</div>
         <h3 className="font-semibold text-gray-900">{title}</h3>
       </div>
-      <div className="space-y-3">
+      <div className="p-5 space-y-3">
         {children}
       </div>
     </div>
@@ -55,17 +57,30 @@ interface InfoRowProps {
   label: string
   value?: string | null
   icon?: React.ReactNode
+  isLink?: boolean
 }
 
-function InfoRow({ label, value, icon }: InfoRowProps) {
+function InfoRow({ label, value, icon, isLink }: InfoRowProps) {
   if (!value) return null
   return (
-    <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
-      <span className="text-gray-500 text-sm flex items-center gap-1.5">
+    <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4">
+      <span className="text-gray-500 text-sm flex items-center gap-1.5 sm:w-24 flex-shrink-0">
         {icon}
         {label}
       </span>
-      <span className="text-gray-900 text-sm font-medium break-all">{value}</span>
+      {isLink && value.startsWith('http') ? (
+        <a 
+          href={value} 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="text-blue-600 text-sm font-medium break-all hover:underline flex items-center gap-1"
+        >
+          {value}
+          <ExternalLink className="w-3 h-3 flex-shrink-0" />
+        </a>
+      ) : (
+        <span className="text-gray-900 text-sm font-medium break-all flex-1">{value}</span>
+      )}
     </div>
   )
 }
@@ -78,14 +93,14 @@ function StatusBadge({ status }: StatusBadgeProps) {
   const { label, color } = getStatusInfo(status)
   
   const colorClasses = {
-    green: 'bg-green-100 text-green-800 border-green-200',
-    yellow: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-    red: 'bg-red-100 text-red-800 border-red-200',
-    gray: 'bg-gray-100 text-gray-800 border-gray-200',
+    green: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    yellow: 'bg-amber-50 text-amber-700 border-amber-200',
+    red: 'bg-red-50 text-red-700 border-red-200',
+    gray: 'bg-gray-50 text-gray-700 border-gray-200',
   }
   
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${colorClasses[color]}`}>
+    <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium border ${colorClasses[color]}`}>
       {label}
     </span>
   )
@@ -100,38 +115,54 @@ function AvailabilityCard({ availability, message }: AvailabilityCardProps) {
   const info = getAvailabilityInfo(availability)
   
   const colorClasses = {
-    green: 'bg-green-50 border-green-200 text-green-900',
-    blue: 'bg-blue-50 border-blue-200 text-blue-900',
-    yellow: 'bg-yellow-50 border-yellow-200 text-yellow-900',
-    red: 'bg-red-50 border-red-200 text-red-900',
-    gray: 'bg-gray-50 border-gray-200 text-gray-900',
+    green: 'bg-gradient-to-br from-emerald-50 to-green-50 border-emerald-200',
+    blue: 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200',
+    yellow: 'bg-gradient-to-br from-amber-50 to-yellow-50 border-amber-200',
+    red: 'bg-gradient-to-br from-red-50 to-rose-50 border-red-200',
+    gray: 'bg-gradient-to-br from-gray-50 to-slate-50 border-gray-200',
   }
   
   const iconColorClasses = {
-    green: 'text-green-600',
+    green: 'text-emerald-600',
     blue: 'text-blue-600',
-    yellow: 'text-yellow-600',
+    yellow: 'text-amber-600',
     red: 'text-red-600',
     gray: 'text-gray-600',
   }
   
+  const textColorClasses = {
+    green: 'text-emerald-900',
+    blue: 'text-blue-900',
+    yellow: 'text-amber-900',
+    red: 'text-red-900',
+    gray: 'text-gray-900',
+  }
+  
+  const subTextColorClasses = {
+    green: 'text-emerald-700',
+    blue: 'text-blue-700',
+    yellow: 'text-amber-700',
+    red: 'text-red-700',
+    gray: 'text-gray-700',
+  }
+  
   const icons = {
-    check: <CheckCircle className={`w-8 h-8 ${iconColorClasses[info.color]}`} />,
-    x: <XCircle className={`w-8 h-8 ${iconColorClasses[info.color]}`} />,
-    alert: <AlertTriangle className={`w-8 h-8 ${iconColorClasses[info.color]}`} />,
-    ban: <Ban className={`w-8 h-8 ${iconColorClasses[info.color]}`} />,
-    help: <HelpCircle className={`w-8 h-8 ${iconColorClasses[info.color]}`} />,
+    check: <CheckCircle className={`w-10 h-10 ${iconColorClasses[info.color]}`} />,
+    x: <XCircle className={`w-10 h-10 ${iconColorClasses[info.color]}`} />,
+    alert: <AlertTriangle className={`w-10 h-10 ${iconColorClasses[info.color]}`} />,
+    ban: <Ban className={`w-10 h-10 ${iconColorClasses[info.color]}`} />,
+    help: <HelpCircle className={`w-10 h-10 ${iconColorClasses[info.color]}`} />,
   }
   
   return (
-    <div className={`rounded-xl border-2 p-6 ${colorClasses[info.color]}`}>
-      <div className="flex items-start gap-4">
-        <div className="flex-shrink-0">
+    <div className={`rounded-2xl border-2 p-6 ${colorClasses[info.color]}`}>
+      <div className="flex items-center gap-4">
+        <div className="flex-shrink-0 p-2 bg-white/60 rounded-xl">
           {icons[info.icon]}
         </div>
         <div>
-          <h2 className="text-xl font-bold mb-1">{info.title}</h2>
-          <p className="text-sm opacity-80">{message || info.description}</p>
+          <h2 className={`text-xl font-bold ${textColorClasses[info.color]}`}>{info.title}</h2>
+          <p className={`text-sm mt-1 ${subTextColorClasses[info.color]}`}>{message || info.description}</p>
         </div>
       </div>
     </div>
@@ -196,25 +227,28 @@ export default function WhoisResult({ data, domain }: WhoisResultProps) {
   // 检查是否有解析到的结构化数据
   const hasStructuredData = data.domainName || data.creationDate || data.registrar || 
     data.registrant || (data.nameServers && data.nameServers.length > 0) ||
-    (data.status && data.status.length > 0) || data.adminContact || data.techContact
+    (data.status && data.status.length > 0) || data.adminContact || data.techContact ||
+    data.expirationDate || data.updatedDate || data.domainId
   
   // 检查是否需要显示非已注册状态的卡片
   const showAvailabilityCard = data.availability !== 'registered'
   
   return (
-    <div className="space-y-6">
-      {/* 域名标题 */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl p-6 text-white">
-        <div className="flex items-center gap-3">
-          <Globe className="w-8 h-8" />
-          <div>
-            <h1 className="text-2xl font-bold">{domain}</h1>
-            <p className="text-blue-100 text-sm mt-1">WHOIS 查询结果</p>
+    <div className="space-y-5">
+      {/* 域名标题卡片 */}
+      <div className="bg-gradient-to-br from-blue-600 via-blue-600 to-indigo-700 rounded-2xl p-6 text-white shadow-lg shadow-blue-500/20">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-white/10 rounded-xl backdrop-blur-sm">
+            <Globe className="w-8 h-8" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-2xl font-bold truncate">{domain}</h1>
+            <p className="text-blue-100 text-sm mt-0.5">WHOIS 查询结果</p>
           </div>
         </div>
         
         {data.status && data.status.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-4">
+          <div className="flex flex-wrap gap-2 mt-5 pt-5 border-t border-white/10">
             {data.status.map((s, i) => (
               <StatusBadge key={i} status={s} />
             ))}
@@ -232,14 +266,14 @@ export default function WhoisResult({ data, domain }: WhoisResultProps) {
       
       {/* 结构化数据 */}
       {hasStructuredData && (
-        <div className="grid gap-4 md:grid-cols-2">
-          {/* 域名信息 */}
+        <div className="grid gap-4 lg:grid-cols-2">
+          {/* 域名信息 - 如果有日期信息就显示 */}
           {(data.domainId || data.creationDate || data.updatedDate || data.expirationDate || data.dnssec) && (
             <InfoCard icon={<Calendar className="w-5 h-5" />} title="域名信息">
               <InfoRow label="域名 ID" value={data.domainId} />
-              <InfoRow label="注册日期" value={data.creationDate} />
-              <InfoRow label="更新日期" value={data.updatedDate} />
-              <InfoRow label="到期日期" value={data.expirationDate} />
+              <InfoRow label="注册日期" value={data.creationDate} icon={<Clock className="w-3.5 h-3.5" />} />
+              <InfoRow label="更新日期" value={data.updatedDate} icon={<Clock className="w-3.5 h-3.5" />} />
+              <InfoRow label="到期日期" value={data.expirationDate} icon={<Clock className="w-3.5 h-3.5" />} />
               <InfoRow label="DNSSEC" value={data.dnssec} icon={<Shield className="w-3.5 h-3.5" />} />
             </InfoCard>
           )}
@@ -248,8 +282,8 @@ export default function WhoisResult({ data, domain }: WhoisResultProps) {
           {data.registrar && (
             <InfoCard icon={<Building2 className="w-5 h-5" />} title="注册商">
               <InfoRow label="ID" value={data.registrar.id} />
-              <InfoRow label="名称" value={data.registrar.name} />
-              <InfoRow label="网站" value={data.registrar.url} />
+              <InfoRow label="名称" value={data.registrar.name} icon={<Building2 className="w-3.5 h-3.5" />} />
+              <InfoRow label="网站" value={data.registrar.url} isLink />
               <InfoRow label="邮箱" value={data.registrar.email} icon={<Mail className="w-3.5 h-3.5" />} />
               <InfoRow label="电话" value={data.registrar.phone} icon={<Phone className="w-3.5 h-3.5" />} />
             </InfoCard>
@@ -295,10 +329,12 @@ export default function WhoisResult({ data, domain }: WhoisResultProps) {
           {/* DNS 服务器 */}
           {data.nameServers && data.nameServers.length > 0 && (
             <InfoCard icon={<Server className="w-5 h-5" />} title="DNS 服务器">
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {data.nameServers.map((ns, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0" />
+                  <div key={i} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg">
+                    <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-xs font-semibold text-blue-600">{i + 1}</span>
+                    </div>
                     <span className="text-gray-900 text-sm font-mono break-all">{ns}</span>
                   </div>
                 ))}
@@ -311,7 +347,7 @@ export default function WhoisResult({ data, domain }: WhoisResultProps) {
             <InfoCard 
               icon={<Info className="w-5 h-5" />} 
               title="其他信息"
-              className="md:col-span-2"
+              className="lg:col-span-2"
             >
               <div className="grid gap-3 sm:grid-cols-2">
                 {Object.entries(data.additionalFields).map(([key, value]) => (
@@ -325,8 +361,10 @@ export default function WhoisResult({ data, domain }: WhoisResultProps) {
       
       {/* 无结构化数据时的提示 */}
       {!hasStructuredData && !showAvailabilityCard && (
-        <div className="bg-gray-50 rounded-xl border border-gray-200 p-6 text-center">
-          <HelpCircle className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+        <div className="bg-gradient-to-br from-gray-50 to-slate-50 rounded-2xl border border-gray-200 p-8 text-center">
+          <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <HelpCircle className="w-8 h-8 text-gray-400" />
+          </div>
           <h3 className="text-lg font-semibold text-gray-900 mb-2">无法解析结构化数据</h3>
           <p className="text-gray-500 text-sm max-w-md mx-auto">
             此域名的 WHOIS 数据格式特殊，无法自动解析。请查看下方原始数据获取完整信息。
@@ -335,36 +373,42 @@ export default function WhoisResult({ data, domain }: WhoisResultProps) {
       )}
       
       {/* 原始数据 */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <button
           onClick={() => setShowRaw(!showRaw)}
-          className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
+          className="w-full flex items-center justify-between p-5 hover:bg-gray-50 transition-colors"
         >
-          <div className="flex items-center gap-2">
-            <FileText className="w-5 h-5 text-gray-500" />
-            <span className="font-medium text-gray-900">原始 WHOIS 数据</span>
-            <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">
-              {data.rawData.split('\n').length} 行
-            </span>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
+              <FileText className="w-5 h-5 text-gray-600" />
+            </div>
+            <div className="text-left">
+              <span className="font-semibold text-gray-900 block">原始 WHOIS 数据</span>
+              <span className="text-xs text-gray-500">
+                {data.rawData.split('\n').length} 行
+              </span>
+            </div>
           </div>
-          {showRaw ? (
-            <ChevronUp className="w-5 h-5 text-gray-500" />
-          ) : (
-            <ChevronDown className="w-5 h-5 text-gray-500" />
-          )}
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${showRaw ? 'bg-blue-100' : 'bg-gray-100'}`}>
+            {showRaw ? (
+              <ChevronUp className={`w-5 h-5 ${showRaw ? 'text-blue-600' : 'text-gray-500'}`} />
+            ) : (
+              <ChevronDown className="w-5 h-5 text-gray-500" />
+            )}
+          </div>
         </button>
         
         {showRaw && (
-          <div className="border-t border-gray-200">
-            <div className="flex justify-end p-2 bg-gray-50 border-b border-gray-200">
+          <div className="border-t border-gray-100">
+            <div className="flex justify-end p-3 bg-gray-50 border-b border-gray-100">
               <button
                 onClick={handleCopy}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded-md transition-colors"
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-gray-200"
               >
                 {copied ? (
                   <>
-                    <Check className="w-4 h-4 text-green-600" />
-                    <span className="text-green-600">已复制</span>
+                    <Check className="w-4 h-4 text-emerald-600" />
+                    <span className="text-emerald-600">已复制</span>
                   </>
                 ) : (
                   <>
@@ -374,7 +418,7 @@ export default function WhoisResult({ data, domain }: WhoisResultProps) {
                 )}
               </button>
             </div>
-            <pre className="p-4 text-xs text-gray-700 overflow-x-auto bg-gray-50 max-h-96 overflow-y-auto font-mono whitespace-pre-wrap">
+            <pre className="p-5 text-xs text-gray-700 overflow-x-auto bg-gray-50 max-h-96 overflow-y-auto font-mono whitespace-pre-wrap leading-relaxed">
               {data.rawData}
             </pre>
           </div>

@@ -98,9 +98,12 @@ const availabilityPatterns = {
     /The queried object does not exist/i,
     /Object does not exist/i,
     /Domain Status: No Object Found/i,
+    /^No match for domain/im,
+    /^NOT FOUND$/im,
+    /Status:\s*AVAILABLE/i,
   ],
   reserved: [
-    /reserved/i,
+    /^reserved$/i,
     /status:\s*reserved/i,
     /domain reserved/i,
     /保留/i,
@@ -109,27 +112,43 @@ const availabilityPatterns = {
     /Reserved Domain Name/i,
     /status:\s*serverHold/i,
   ],
+  // 仅匹配真正禁止注册的情况，不包括域名保护状态
   prohibited: [
-    /prohibited/i,
-    /forbidden/i,
-    /blocked/i,
-    /banned/i,
-    /not allowed/i,
+    /^prohibited$/i,
+    /^forbidden$/i,
+    /^blocked$/i,
+    /^banned$/i,
+    /not allowed to register/i,
     /禁止注册/i,
     /cannot be registered/i,
     /registration not allowed/i,
     /This domain cannot be registered/i,
-    /Domain name is not available/i,
-    /invalid domain/i,
+    /Domain is not available for registration/i,
+    /invalid domain name/i,
+    /illegal domain/i,
   ],
 };
+
+// 域名保护状态标识（这些是已注册域名的保护措施，不是禁止注册）
+const protectionStatuses = [
+  /client.*prohibited/i,
+  /server.*prohibited/i,
+  /clienttransferprohibited/i,
+  /clientdeleteprohibited/i,
+  /clientupdateprohibited/i,
+  /clientrenewprohibited/i,
+  /servertransferprohibited/i,
+  /serverdeleteprohibited/i,
+  /serverupdateprohibited/i,
+  /serverrenewprohibited/i,
+];
 
 // 字段映射表，支持多语言和不同格式
 const fieldMappings: Record<string, string[]> = {
   domainName: [
     'Domain Name', 'Nom de domaine', 'domain', 'Domain', 
     'domain name', 'ドメイン名', '域名', 'Dominio',
-    'Nome de Domínio', 'Nombre de Dominio'
+    'Nome de Domínio', 'Nombre de Dominio', 'Domainnaam'
   ],
   domainId: [
     'Domain ID', 'Registry Domain ID', 'Domain Handle',
@@ -140,19 +159,22 @@ const fieldMappings: Record<string, string[]> = {
     'Registration Date', 'Created', 'Registered on', 'Registration Time',
     'created', 'Fecha de creación', 'Data de Criação', '注册日期',
     'Domain Registration Date', 'Registered Date', 'Domain Create Date',
-    'Record created on', 'Domain created'
+    'Record created on', 'Domain created', 'record created',
+    'Registered', 'Registration', 'Created at', 'Création'
   ],
   updatedDate: [
     'Updated Date', 'Dernière modification', 'Last Modified', 'Last Updated On',
     'Last Updated', 'Modified', 'Last Update', 'Updated On', 'changed',
     'Última modificación', 'Última Atualização', '更新日期',
-    'Domain Last Updated Date', 'Record last updated on'
+    'Domain Last Updated Date', 'Record last updated on', 'record last updated',
+    'Updated at', 'Modification'
   ],
   expirationDate: [
     'Expiration Date', "Date d'expiration", 'Registry Expiry Date', 'Expiry Date',
     'Expiry', 'Expires On', 'Expires', 'Paid-Till', 'Valid Until',
     'Fecha de expiración', 'Data de Expiração', '到期日期', 'Renewal Date',
-    'Registrar Registration Expiration Date', 'free-date', 'Domain Expiration Date'
+    'Registrar Registration Expiration Date', 'free-date', 'Domain Expiration Date',
+    'Expiration', 'Expires at'
   ],
   registrarName: [
     'Registrar', 'Registrar Name', 'Sponsoring Registrar', 
@@ -176,12 +198,12 @@ const fieldMappings: Record<string, string[]> = {
   ],
   registrantName: [
     'Registrant Name', 'Nom', 'Name', 'Owner Name', 'Holder Name',
-    'Contact Name', 'Registrant', '注册人', 'Owner'
+    'Contact Name', 'Registrant', '注册人', 'Owner', 'Holder'
   ],
   registrantOrg: [
     'Registrant Organization', 'Organisation', 'Organization', 
     'Registrant Org', 'Owner Organization', 'Holder Organization',
-    '注册人组织', 'Org'
+    '注册人组织', 'Org', 'Organization Name'
   ],
   registrantEmail: [
     'Registrant Email', 'Email', 'Owner Email', 'Holder Email',
@@ -246,7 +268,7 @@ function extractField(raw: string, fieldNames: string[]): string | undefined {
     const patterns = [
       // 标准格式: "Field Name: value"
       new RegExp(`^\\s*${escapeRegex(fieldName)}\\s*:\\s*(.+?)\\s*$`, 'im'),
-      // 带空格的格式: "Field Name    value"
+      // 带多个空格的格式: "Field Name    value"
       new RegExp(`^\\s*${escapeRegex(fieldName)}\\s{2,}(.+?)\\s*$`, 'im'),
       // 方括号格式: "[Field Name] value"
       new RegExp(`^\\s*\\[${escapeRegex(fieldName)}\\]\\s*(.+?)\\s*$`, 'im'),
@@ -254,6 +276,12 @@ function extractField(raw: string, fieldNames: string[]): string | undefined {
       new RegExp(`^\\s*${escapeRegex(fieldName.toLowerCase().replace(/\s+/g, '_'))}\\s*=\\s*(.+?)\\s*$`, 'im'),
       // 点号格式: "field.name: value"
       new RegExp(`^\\s*${escapeRegex(fieldName.toLowerCase().replace(/\s+/g, '.'))}\\s*:\\s*(.+?)\\s*$`, 'im'),
+      // 下划线格式：field_name: value
+      new RegExp(`^\\s*${escapeRegex(fieldName.toLowerCase().replace(/\s+/g, '_'))}\\s*:\\s*(.+?)\\s*$`, 'im'),
+      // 连字符格式：field-name: value
+      new RegExp(`^\\s*${escapeRegex(fieldName.toLowerCase().replace(/\s+/g, '-'))}\\s*:\\s*(.+?)\\s*$`, 'im'),
+      // Tab分隔格式
+      new RegExp(`^\\s*${escapeRegex(fieldName)}\\s*\\t+(.+?)\\s*$`, 'im'),
     ];
     
     for (const pattern of patterns) {
@@ -276,6 +304,7 @@ function extractMultipleFields(raw: string, fieldNames: string[]): string[] {
     const patterns = [
       new RegExp(`^\\s*${escapeRegex(fieldName)}\\s*:?\\s*(.+?)\\s*$`, 'gim'),
       new RegExp(`^\\s*${escapeRegex(fieldName)}\\s{2,}(.+?)\\s*$`, 'gim'),
+      new RegExp(`^\\s*${escapeRegex(fieldName)}\\s*\\t+(.+?)\\s*$`, 'gim'),
     ];
     
     for (const pattern of patterns) {
@@ -297,13 +326,17 @@ function cleanValue(value: string): string | undefined {
   
   let cleaned = value.trim();
   
+  // 移除 URL 后缀（如 "clientTransferProhibited https://..."）
+  cleaned = cleaned.replace(/\s+https?:\/\/\S+/g, '');
+  
   // 移除常见的无效值
   const invalidValues = [
     '-', '--', 'N/A', 'n/a', 'NA', 'na', 'null', 'NULL', 
     'none', 'NONE', 'Not Available', 'Not Disclosed', 
     'REDACTED FOR PRIVACY', 'REDACTED', 'Data Protected',
     'Please query the RDDS service', 'Contact Privacy Inc.',
-    '***', '......', 'not disclosed', 'private', 'PRIVATE'
+    '***', '......', 'not disclosed', 'private', 'PRIVATE',
+    'Redacted for Privacy', 'DATA REDACTED'
   ];
   
   if (invalidValues.some(inv => cleaned.toLowerCase() === inv.toLowerCase())) {
@@ -311,6 +344,9 @@ function cleanValue(value: string): string | undefined {
   }
   
   // 移除隐私保护文本
+  if (cleaned.toLowerCase().includes('redacted') && cleaned.length < 50) {
+    return undefined;
+  }
   if (cleaned.toLowerCase().includes('privacy') && cleaned.length < 50) {
     return undefined;
   }
@@ -329,37 +365,44 @@ function formatDate(dateStr: string | undefined): string | undefined {
   if (!dateStr) return undefined;
   
   try {
+    // 移除时间部分的特殊字符
+    let cleaned = dateStr.trim();
+    
     // 处理多种日期格式
     let date: Date | null = null;
     
     // ISO 格式 (2025-05-19T...)
-    if (dateStr.includes('T') || /^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
-      date = new Date(dateStr);
+    if (cleaned.includes('T') || /^\d{4}-\d{2}-\d{2}/.test(cleaned)) {
+      date = new Date(cleaned);
     }
     // DD-Mon-YYYY 格式 (19-May-2025)
-    else if (/^\d{2}-[A-Za-z]{3}-\d{4}/.test(dateStr)) {
-      date = new Date(dateStr);
+    else if (/^\d{2}-[A-Za-z]{3}-\d{4}/.test(cleaned)) {
+      date = new Date(cleaned);
+    }
+    // YYYY-MM-DD 格式
+    else if (/^\d{4}-\d{2}-\d{2}/.test(cleaned)) {
+      date = new Date(cleaned);
     }
     // DD/MM/YYYY 格式
-    else if (/^\d{2}\/\d{2}\/\d{4}/.test(dateStr)) {
-      const [day, month, year] = dateStr.split('/');
+    else if (/^\d{2}\/\d{2}\/\d{4}/.test(cleaned)) {
+      const [day, month, year] = cleaned.split('/');
       date = new Date(`${year}-${month}-${day}`);
     }
     // YYYY/MM/DD 格式
-    else if (/^\d{4}\/\d{2}\/\d{2}/.test(dateStr)) {
-      const [year, month, day] = dateStr.split('/');
+    else if (/^\d{4}\/\d{2}\/\d{2}/.test(cleaned)) {
+      const [year, month, day] = cleaned.split('/');
       date = new Date(`${year}-${month}-${day}`);
     }
     // DD.MM.YYYY 格式
-    else if (/^\d{2}\.\d{2}\.\d{4}/.test(dateStr)) {
-      const [day, month, year] = dateStr.split('.');
+    else if (/^\d{2}\.\d{2}\.\d{4}/.test(cleaned)) {
+      const [day, month, year] = cleaned.split('.');
       date = new Date(`${year}-${month}-${day}`);
     }
     // YYYYMMDD 格式
-    else if (/^\d{8}$/.test(dateStr)) {
-      const year = dateStr.slice(0, 4);
-      const month = dateStr.slice(4, 6);
-      const day = dateStr.slice(6, 8);
+    else if (/^\d{8}$/.test(cleaned)) {
+      const year = cleaned.slice(0, 4);
+      const month = cleaned.slice(4, 6);
+      const day = cleaned.slice(6, 8);
       date = new Date(`${year}-${month}-${day}`);
     }
     
@@ -371,7 +414,7 @@ function formatDate(dateStr: string | undefined): string | undefined {
       });
     }
     
-    return dateStr;
+    return cleaned;
   } catch {
     return dateStr;
   }
@@ -401,7 +444,32 @@ function detectAvailability(raw: string): {
   availability: WhoisData['availability']; 
   message?: string;
 } {
-  const rawLower = raw.toLowerCase();
+  // 先检查是否有域名保护状态（这意味着域名已注册）
+  for (const pattern of protectionStatuses) {
+    if (pattern.test(raw)) {
+      // 有保护状态表示域名已注册，不是禁止注册
+      return { availability: 'registered' };
+    }
+  }
+  
+  // 检查是否有明显的已注册标志
+  const registeredIndicators = [
+    /domain\s*name\s*:/i,
+    /registr(ar|ant)\s*:/i,
+    /creat(ion|ed)\s*(date)?:/i,
+    /expir(y|ation)\s*(date)?:/i,
+    /name\s*server\s*:/i,
+    /record\s+created/i,
+    /registration\s+date/i,
+    /status:\s*(active|ok)/i,
+    /statut:\s*actif/i,
+  ];
+  
+  for (const pattern of registeredIndicators) {
+    if (pattern.test(raw)) {
+      return { availability: 'registered' };
+    }
+  }
   
   // 检查是否可注册
   for (const pattern of availabilityPatterns.available) {
@@ -423,29 +491,13 @@ function detectAvailability(raw: string): {
     }
   }
   
-  // 检查是否禁止注册
+  // 检查是否禁止注册（排除已经判断为已注册的情况）
   for (const pattern of availabilityPatterns.prohibited) {
     if (pattern.test(raw)) {
       return { 
         availability: 'prohibited',
         message: '此域名禁止注册'
       };
-    }
-  }
-  
-  // 检查是否有明显的已注册标志
-  const registeredIndicators = [
-    /domain name:/i,
-    /registr(ar|ant)/i,
-    /creation date/i,
-    /expir(y|ation)/i,
-    /name server/i,
-    /status:\s*(active|ok|client)/i,
-  ];
-  
-  for (const pattern of registeredIndicators) {
-    if (pattern.test(raw)) {
-      return { availability: 'registered' };
     }
   }
   
@@ -472,8 +524,16 @@ function extractAdditionalFields(raw: string, existingKeys: Set<string>): Record
       continue;
     }
     
+    // 跳过空行
+    if (!line.trim()) continue;
+    
+    // 跳过包含 URL 的提示行
+    if (/^(For further|Tovabbi|see:|ld\.:)/i.test(line.trim())) {
+      continue;
+    }
+    
     // 尝试提取键值对
-    const match = line.match(/^\s*([A-Za-z][A-Za-z0-9\s\-_.\/]+?)\s*:\s*(.+?)\s*$/);
+    const match = line.match(/^\s*([A-Za-z][A-Za-z0-9\s\-_.\/]*?)\s*:\s*(.+?)\s*$/);
     if (match) {
       const key = match[1].trim();
       const value = cleanValue(match[2]);
@@ -621,15 +681,15 @@ export function getStatusInfo(status: string): { label: string; color: 'green' |
     return { label: '已过期', color: 'red' };
   }
   
-  // 锁定/保护状态
+  // 域名保护状态（这些是积极的保护措施）
   if (statusLower.includes('clienttransferprohibited') || statusLower.includes('servertransferprohibited')) {
-    return { label: '禁止转移', color: 'yellow' };
+    return { label: '禁止转移', color: 'green' };
   }
   if (statusLower.includes('clientdeleteprohibited') || statusLower.includes('serverdeleteprohibited')) {
     return { label: '禁止删除', color: 'green' };
   }
   if (statusLower.includes('clientupdateprohibited') || statusLower.includes('serverupdateprohibited')) {
-    return { label: '禁止更新', color: 'yellow' };
+    return { label: '禁止更新', color: 'green' };
   }
   if (statusLower.includes('clienthold') || statusLower.includes('serverhold')) {
     return { label: '暂停解析', color: 'red' };
@@ -643,7 +703,7 @@ export function getStatusInfo(status: string): { label: string; color: 'green' |
     return { label: '自动续费', color: 'green' };
   }
   if (statusLower.includes('lock')) {
-    return { label: '已锁定', color: 'yellow' };
+    return { label: '已锁定', color: 'green' };
   }
   if (statusLower.includes('connect')) {
     return { label: '已连接', color: 'green' };
