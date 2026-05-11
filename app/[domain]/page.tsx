@@ -1,5 +1,7 @@
 import Header from '@/components/header'
+import WhoisResult from '@/components/whois-result'
 import { whois } from '@/lib/whois'
+import { parseWhoisData } from '@/lib/whois-parser'
 import { unstable_cache } from 'next/cache'
 
 export default async function Page({
@@ -9,21 +11,18 @@ export default async function Page({
 }) {
   const { domain } = await params
 
-  const data = unstable_cache(async () => whois(domain), [domain], {
+  const rawData = await unstable_cache(async () => whois(domain), [domain], {
     revalidate: 3600,
   })()
+
+  const parsedData = parseWhoisData(rawData)
 
   return (
     <>
       <Header />
-      {data && (
-        <div className='max-w-3xl mx-auto p-4'>
-          <h1 className='text-3xl font-bold text-blue-600'>
-            WHOIS Lookup for {domain}
-          </h1>
-          <pre>{data}</pre>
-        </div>
-      )}
+      <main className="max-w-3xl mx-auto p-4 pb-8">
+        <WhoisResult data={parsedData} domain={domain} />
+      </main>
     </>
   )
 }
