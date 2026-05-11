@@ -1,14 +1,12 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { WhoisData, getStatusInfo, getAvailabilityInfo } from '@/lib/whois-parser'
+import { WhoisData, getStatusInfo, getAvailabilityInfo, getRelativeTime, getDomainAge } from '@/lib/whois-parser'
 import { 
   Globe, 
-  Calendar, 
   Server, 
   Building2, 
   User, 
-  FileText,
   ChevronDown,
   ChevronUp,
   Copy,
@@ -19,72 +17,17 @@ import {
   Ban,
   HelpCircle,
   Shield,
-  Mail,
-  Phone,
-  MapPin,
   Clock,
   ExternalLink,
-  Download
+  Download,
+  Mail,
+  Phone,
+  Users
 } from 'lucide-react'
 
 interface WhoisResultProps {
   data: WhoisData
   domain: string
-}
-
-// 计算相对时间
-function getRelativeTime(dateStr: string): string {
-  try {
-    // 尝试解析中文日期格式 "2025年5月19日"
-    const chineseMatch = dateStr.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/)
-    let date: Date
-    
-    if (chineseMatch) {
-      date = new Date(parseInt(chineseMatch[1]), parseInt(chineseMatch[2]) - 1, parseInt(chineseMatch[3]))
-    } else {
-      date = new Date(dateStr)
-    }
-    
-    if (isNaN(date.getTime())) return ''
-    
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffDays = Math.floor(Math.abs(diffMs) / (1000 * 60 * 60 * 24))
-    const isPast = diffMs > 0
-    
-    if (diffDays < 1) return '今天'
-    if (diffDays < 30) return isPast ? `${diffDays} 天前` : `剩余 ${diffDays} 天`
-    if (diffDays < 365) {
-      const months = Math.floor(diffDays / 30)
-      return isPast ? `${months} 个月前` : `剩余 ${months} 个月`
-    }
-    const years = Math.floor(diffDays / 365)
-    return isPast ? `${years} 年前` : `剩余 ${diffDays} 天`
-  } catch {
-    return ''
-  }
-}
-
-// 计算域名年龄
-function getDomainAge(creationDate: string): string {
-  try {
-    const chineseMatch = creationDate.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/)
-    let date: Date
-    
-    if (chineseMatch) {
-      date = new Date(parseInt(chineseMatch[1]), parseInt(chineseMatch[2]) - 1, parseInt(chineseMatch[3]))
-    } else {
-      date = new Date(creationDate)
-    }
-    
-    if (isNaN(date.getTime())) return ''
-    
-    const now = new Date()
-    const years = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24 * 365))
-    return `${years} 年`
-  } catch {
-    return ''
-  }
 }
 
 // 状态码解释
@@ -152,6 +95,11 @@ export default function WhoisResult({ data, domain }: WhoisResultProps) {
   // 检查是否需要显示非已注册状态的卡片
   const showAvailabilityCard = data.availability !== 'registered'
   const availabilityInfo = getAvailabilityInfo(data.availability)
+  
+  // 获取日期相对时间
+  const creationRelative = data.creationDate ? getRelativeTime(data.creationDate) : null
+  const expirationRelative = data.expirationDate ? getRelativeTime(data.expirationDate) : null
+  const updatedRelative = data.updatedDate ? getRelativeTime(data.updatedDate) : null
   
   return (
     <div className="space-y-4">
@@ -258,23 +206,29 @@ export default function WhoisResult({ data, domain }: WhoisResultProps) {
               <div className="space-y-1">
                 <p className="text-sm text-gray-500">创建日期</p>
                 <p className="text-xl font-semibold text-gray-900">{data.creationDate}</p>
-                <p className="text-sm text-gray-400">{getRelativeTime(data.creationDate)}</p>
+                {creationRelative && creationRelative.text && (
+                  <p className="text-sm text-gray-400">{creationRelative.text}</p>
+                )}
               </div>
             )}
             {data.expirationDate && (
               <div className="space-y-1">
                 <p className="text-sm text-gray-500">过期日期</p>
                 <p className="text-xl font-semibold text-gray-900">{data.expirationDate}</p>
-                <p className={`text-sm ${getRelativeTime(data.expirationDate).includes('剩余') ? 'text-emerald-600 font-medium' : 'text-gray-400'}`}>
-                  {getRelativeTime(data.expirationDate)}
-                </p>
+                {expirationRelative && expirationRelative.text && (
+                  <p className={`text-sm ${!expirationRelative.isPast ? 'text-emerald-600 font-medium' : 'text-red-500'}`}>
+                    {expirationRelative.text}
+                  </p>
+                )}
               </div>
             )}
             {data.updatedDate && (
-              <div className="space-y-1 sm:col-span-2">
+              <div className="space-y-1">
                 <p className="text-sm text-gray-500">更新日期</p>
                 <p className="text-xl font-semibold text-gray-900">{data.updatedDate}</p>
-                <p className="text-sm text-gray-400">{getRelativeTime(data.updatedDate)}</p>
+                {updatedRelative && updatedRelative.text && (
+                  <p className="text-sm text-gray-400">{updatedRelative.text}</p>
+                )}
               </div>
             )}
           </div>
@@ -285,25 +239,31 @@ export default function WhoisResult({ data, domain }: WhoisResultProps) {
               <div className="h-px bg-gray-100 my-6"></div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {(data.registrant?.email || data.registrar?.email) && (
-                  <div className="space-y-1">
-                    <p className="text-sm text-gray-500">联系邮箱</p>
-                    <a 
-                      href={`mailto:${data.registrant?.email || data.registrar?.email}`}
-                      className="text-blue-600 hover:underline break-all"
-                    >
-                      {data.registrant?.email || data.registrar?.email}
-                    </a>
+                  <div className="flex items-center gap-3">
+                    <Mail className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-xs text-gray-500">联系邮箱</p>
+                      <a 
+                        href={`mailto:${data.registrant?.email || data.registrar?.email}`}
+                        className="text-sm text-blue-600 hover:underline truncate block"
+                      >
+                        {data.registrant?.email || data.registrar?.email}
+                      </a>
+                    </div>
                   </div>
                 )}
                 {(data.registrant?.phone || data.registrar?.phone) && (
-                  <div className="space-y-1">
-                    <p className="text-sm text-gray-500">联系电话</p>
-                    <a 
-                      href={`tel:${data.registrant?.phone || data.registrar?.phone}`}
-                      className="text-blue-600 hover:underline"
-                    >
-                      {data.registrant?.phone || data.registrar?.phone}
-                    </a>
+                  <div className="flex items-center gap-3">
+                    <Phone className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-xs text-gray-500">联系电话</p>
+                      <a 
+                        href={`tel:${data.registrant?.phone || data.registrar?.phone}`}
+                        className="text-sm text-blue-600 hover:underline"
+                      >
+                        {data.registrant?.phone || data.registrar?.phone}
+                      </a>
+                    </div>
                   </div>
                 )}
               </div>
@@ -326,11 +286,12 @@ export default function WhoisResult({ data, domain }: WhoisResultProps) {
               return (
                 <div key={i} className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
                       info.color === 'green' ? 'bg-emerald-500' :
+                      info.color === 'blue' ? 'bg-blue-500' :
                       info.color === 'yellow' ? 'bg-amber-500' :
                       info.color === 'red' ? 'bg-red-500' :
-                      'bg-blue-500'
+                      'bg-gray-400'
                     }`}></span>
                     <span className="font-medium text-gray-900">{s}</span>
                   </div>
@@ -360,7 +321,16 @@ export default function WhoisResult({ data, domain }: WhoisResultProps) {
           {data.dnssec && (
             <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
               <span className="text-sm text-gray-500">DNS 安全扩展</span>
-              <span className="text-sm font-medium text-gray-900">{data.dnssec}</span>
+              <span className={`text-sm font-medium ${
+                data.dnssec.toLowerCase() === 'unsigned' || data.dnssec.toLowerCase() === 'no' 
+                  ? 'text-gray-500' 
+                  : 'text-emerald-600'
+              }`}>
+                {data.dnssec.toLowerCase() === 'unsigned' ? '未签名' : 
+                 data.dnssec.toLowerCase() === 'no' ? '未启用' : 
+                 data.dnssec.toLowerCase() === 'yes' ? '已签名' : 
+                 data.dnssec}
+              </span>
             </div>
           )}
         </div>
@@ -398,18 +368,24 @@ export default function WhoisResult({ data, domain }: WhoisResultProps) {
             </div>
           </div>
           
-          {(data.domainId || data.registrar.email || data.registrar.phone) && (
+          {(data.domainId || data.registrar.whoisServer || data.registrar.email || data.registrar.phone) && (
             <div className="space-y-3 pt-4 border-t border-gray-100">
+              {data.registrar.whoisServer && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-500">WHOIS 服务器</span>
+                  <span className="text-sm font-mono text-gray-900">{data.registrar.whoisServer}</span>
+                </div>
+              )}
               {data.domainId && (
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-500">注册局域名 ID</span>
-                  <span className="text-sm font-mono text-gray-900">{data.domainId}</span>
+                  <span className="text-sm font-mono text-gray-900 truncate ml-4">{data.domainId}</span>
                 </div>
               )}
               {data.registrar.email && (
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-500">滥用举报邮箱</span>
-                  <a href={`mailto:${data.registrar.email}`} className="text-sm text-blue-600 hover:underline">
+                  <a href={`mailto:${data.registrar.email}`} className="text-sm text-blue-600 hover:underline truncate ml-4">
                     {data.registrar.email}
                   </a>
                 </div>
@@ -463,6 +439,38 @@ export default function WhoisResult({ data, domain }: WhoisResultProps) {
                 </a>
               </div>
             )}
+            {data.registrant.fax && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">传真</span>
+                <span className="text-sm text-gray-900">{data.registrant.fax}</span>
+              </div>
+            )}
+            {(data.registrant.address || data.registrant.street) && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">地址</span>
+                <span className="text-sm font-medium text-gray-900 text-right">
+                  {data.registrant.address || data.registrant.street}
+                </span>
+              </div>
+            )}
+            {data.registrant.city && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">城市</span>
+                <span className="text-sm font-medium text-gray-900">{data.registrant.city}</span>
+              </div>
+            )}
+            {data.registrant.state && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">省/州</span>
+                <span className="text-sm font-medium text-gray-900">{data.registrant.state}</span>
+              </div>
+            )}
+            {data.registrant.postalCode && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">邮编</span>
+                <span className="text-sm font-medium text-gray-900">{data.registrant.postalCode}</span>
+              </div>
+            )}
             {data.registrant.country && (
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-500">国家</span>
@@ -473,20 +481,82 @@ export default function WhoisResult({ data, domain }: WhoisResultProps) {
         </div>
       )}
       
-      {/* 额外字段 */}
-      {data.additionalFields && Object.keys(data.additionalFields).length > 0 && (
+      {/* 管理联系人 */}
+      {data.adminContact && Object.values(data.adminContact).some(v => v) && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <div className="flex items-center gap-2 mb-4">
-            <FileText className="w-5 h-5 text-gray-400" />
-            <h3 className="font-semibold text-gray-900">其他信息</h3>
+            <Users className="w-5 h-5 text-gray-400" />
+            <h3 className="font-semibold text-gray-900">管理联系人</h3>
           </div>
           <div className="space-y-3">
-            {Object.entries(data.additionalFields).map(([key, value]) => (
-              <div key={key} className="flex items-start justify-between gap-4">
-                <span className="text-sm text-gray-500 flex-shrink-0">{key}</span>
-                <span className="text-sm text-gray-900 text-right break-all">{value}</span>
+            {data.adminContact.name && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">姓名</span>
+                <span className="text-sm font-medium text-gray-900">{data.adminContact.name}</span>
               </div>
-            ))}
+            )}
+            {data.adminContact.organization && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">组织</span>
+                <span className="text-sm font-medium text-gray-900">{data.adminContact.organization}</span>
+              </div>
+            )}
+            {data.adminContact.email && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">邮箱</span>
+                <a href={`mailto:${data.adminContact.email}`} className="text-sm text-blue-600 hover:underline">
+                  {data.adminContact.email}
+                </a>
+              </div>
+            )}
+            {data.adminContact.phone && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">电话</span>
+                <a href={`tel:${data.adminContact.phone}`} className="text-sm text-blue-600 hover:underline">
+                  {data.adminContact.phone}
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* 技术联系人 */}
+      {data.techContact && Object.values(data.techContact).some(v => v) && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Server className="w-5 h-5 text-gray-400" />
+            <h3 className="font-semibold text-gray-900">技术联系人</h3>
+          </div>
+          <div className="space-y-3">
+            {data.techContact.name && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">姓名</span>
+                <span className="text-sm font-medium text-gray-900">{data.techContact.name}</span>
+              </div>
+            )}
+            {data.techContact.organization && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">组织</span>
+                <span className="text-sm font-medium text-gray-900">{data.techContact.organization}</span>
+              </div>
+            )}
+            {data.techContact.email && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">邮箱</span>
+                <a href={`mailto:${data.techContact.email}`} className="text-sm text-blue-600 hover:underline">
+                  {data.techContact.email}
+                </a>
+              </div>
+            )}
+            {data.techContact.phone && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">电话</span>
+                <a href={`tel:${data.techContact.phone}`} className="text-sm text-blue-600 hover:underline">
+                  {data.techContact.phone}
+                </a>
+              </div>
+            )}
           </div>
         </div>
       )}

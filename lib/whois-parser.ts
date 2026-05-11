@@ -3,8 +3,11 @@ export interface WhoisData {
   domainName?: string;
   domainId?: string;
   creationDate?: string;
+  creationDateRaw?: string;
   updatedDate?: string;
+  updatedDateRaw?: string;
   expirationDate?: string;
+  expirationDateRaw?: string;
   status?: string[];
   
   // 域名可用性状态
@@ -18,6 +21,7 @@ export interface WhoisData {
     email?: string;
     phone?: string;
     id?: string;
+    whoisServer?: string;
   };
   
   // 注册人信息
@@ -27,11 +31,14 @@ export interface WhoisData {
     organization?: string;
     email?: string;
     phone?: string;
+    fax?: string;
     address?: string;
+    street?: string;
     city?: string;
     state?: string;
     postalCode?: string;
     country?: string;
+    countryCode?: string;
     type?: string;
   };
   
@@ -69,9 +76,6 @@ export interface WhoisData {
   // DNSSEC
   dnssec?: string;
   
-  // 额外提取的字段（动态）
-  additionalFields?: Record<string, string>;
-  
   // 原始数据
   rawData: string;
 }
@@ -101,6 +105,12 @@ const availabilityPatterns = {
     /^No match for domain/im,
     /^NOT FOUND$/im,
     /Status:\s*AVAILABLE/i,
+    /^No Data Found$/im,
+    /^Domain Status: available$/im,
+    /^This domain is available/im,
+    /^% Object does not exist/m,
+    /query_status:\s*220\s+Available/i,
+    /^Status:\s*free$/im,
   ],
   reserved: [
     /^reserved$/i,
@@ -111,8 +121,9 @@ const availabilityPatterns = {
     /premium domain/i,
     /Reserved Domain Name/i,
     /status:\s*serverHold/i,
+    /reserved\s+domain/i,
+    /is reserved/i,
   ],
-  // 仅匹配真正禁止注册的情况，不包括域名保护状态
   prohibited: [
     /^prohibited$/i,
     /^forbidden$/i,
@@ -148,11 +159,13 @@ const fieldMappings: Record<string, string[]> = {
   domainName: [
     'Domain Name', 'Nom de domaine', 'domain', 'Domain', 
     'domain name', 'ドメイン名', '域名', 'Dominio',
-    'Nome de Domínio', 'Nombre de Dominio', 'Domainnaam'
+    'Nome de Domínio', 'Nombre de Dominio', 'Domainnaam',
+    'Domainname', 'Domain-Name', 'nome de domínio'
   ],
   domainId: [
     'Domain ID', 'Registry Domain ID', 'Domain Handle',
-    'Handle', 'ROID', 'Registry ID'
+    'Handle', 'ROID', 'Registry ID', 'Domain ROID',
+    'Registry ROID', 'Domain Registry ID'
   ],
   creationDate: [
     'Creation Date', 'Date de création', 'Created Date', 'Created On', 
@@ -160,105 +173,148 @@ const fieldMappings: Record<string, string[]> = {
     'created', 'Fecha de creación', 'Data de Criação', '注册日期',
     'Domain Registration Date', 'Registered Date', 'Domain Create Date',
     'Record created on', 'Domain created', 'record created',
-    'Registered', 'Registration', 'Created at', 'Création'
+    'Registered', 'Registration', 'Created at', 'Création',
+    'Creation date', 'Domain created on', 'Registered On',
+    'First registration date', 'created-date', 'createdate',
+    'Create Date', 'Domain Name Commencement Date', 'Activation',
+    'Registered Time', 'reg-date', 'Registration Date Time',
+    'Domain created on', 'Registered Date', 'Date registered',
+    'reg_created', 'created on', 'Registrarion Date'
   ],
   updatedDate: [
     'Updated Date', 'Dernière modification', 'Last Modified', 'Last Updated On',
     'Last Updated', 'Modified', 'Last Update', 'Updated On', 'changed',
     'Última modificación', 'Última Atualização', '更新日期',
     'Domain Last Updated Date', 'Record last updated on', 'record last updated',
-    'Updated at', 'Modification'
+    'Updated at', 'Modification', 'Last Modified Date', 'Update Date',
+    'Last update', 'last-update', 'last-updated', 'Last Changed',
+    'Modification Date', 'Changed Date', 'Modified Date', 'Modified on',
+    'Domain last updated', 'last updated on', 'record modified',
+    'Last modification date', 'Updated', 'Update'
   ],
   expirationDate: [
     'Expiration Date', "Date d'expiration", 'Registry Expiry Date', 'Expiry Date',
     'Expiry', 'Expires On', 'Expires', 'Paid-Till', 'Valid Until',
     'Fecha de expiración', 'Data de Expiração', '到期日期', 'Renewal Date',
     'Registrar Registration Expiration Date', 'free-date', 'Domain Expiration Date',
-    'Expiration', 'Expires at'
+    'Expiration', 'Expires at', 'Expiry date', 'Expire Date',
+    'Expiration date', 'exp-date', 'expire-date', 'Domain expires',
+    'Registration Expiration Date', 'Domain Expiry Date', 'Expires date',
+    'expire', 'Validity', 'Valid until', 'Expire on', 'Due Date',
+    'Registry Expiration Date', 'Domain expires on', 'expiredate'
   ],
   registrarName: [
     'Registrar', 'Registrar Name', 'Sponsoring Registrar', 
     'Registrar Organization', 'Provider', '注册商', 'Registrador',
-    'Registrar Company Name', 'Current Registrar'
+    'Registrar Company Name', 'Current Registrar', 'Registrar Organization Name',
+    'Registrar-Name', 'Registrar info', 'Billing Contact', 'Provider Name',
+    'Registrar Company', 'reg_name', 'Accredited Registrar'
   ],
   registrarUrl: [
     'Registrar URL', 'Registrar Website', 'Registrar Web', 
-    'Registrar Homepage'
+    'Registrar Homepage', 'Registrar URL (registration services)',
+    'Referral URL', 'Registrar web', 'Registrar-URL'
   ],
   registrarEmail: [
     'Registrar Abuse Contact Email', 'Registrar Email', 
-    'Abuse Contact Email', 'Registrar Contact Email'
+    'Abuse Contact Email', 'Registrar Contact Email',
+    'Registrar abuse contact email', 'abuse-mailbox'
   ],
   registrarPhone: [
     'Registrar Abuse Contact Phone', 'Registrar Phone',
-    'Abuse Contact Phone', 'Registrar Contact Phone'
+    'Abuse Contact Phone', 'Registrar Contact Phone',
+    'Registrar abuse contact phone', 'abuse-phone'
   ],
   registrarId: [
-    'Registrar IANA ID', 'Registrar ID', 'Sponsoring Registrar IANA ID'
+    'Registrar IANA ID', 'Registrar ID', 'Sponsoring Registrar IANA ID',
+    'IANA ID', 'Registrar-ID'
+  ],
+  registrarWhoisServer: [
+    'Registrar WHOIS Server', 'WHOIS Server', 'Whois Server',
+    'whois-server', 'Registrar Whois'
   ],
   registrantName: [
     'Registrant Name', 'Nom', 'Name', 'Owner Name', 'Holder Name',
-    'Contact Name', 'Registrant', '注册人', 'Owner', 'Holder'
+    'Contact Name', 'Registrant', '注册人', 'Owner', 'Holder',
+    'Registrant Contact Name', 'Domain Owner', 'Registrant-Name',
+    'owner-name', 'holder-name', 'Domain Holder'
   ],
   registrantOrg: [
     'Registrant Organization', 'Organisation', 'Organization', 
     'Registrant Org', 'Owner Organization', 'Holder Organization',
-    '注册人组织', 'Org', 'Organization Name'
+    '注册人组织', 'Org', 'Organization Name', 'Registrant Organisation',
+    'Registrant-Organization', 'org-name', 'Registrant Company'
   ],
   registrantEmail: [
     'Registrant Email', 'Email', 'Owner Email', 'Holder Email',
-    'Contact Email', 'E-mail', '邮箱'
+    'Contact Email', 'E-mail', '邮箱', 'Registrant E-mail',
+    'Registrant Contact Email', 'owner-email', 'e-mail'
   ],
   registrantPhone: [
     'Registrant Phone', 'Phone', 'Téléphone', 'Owner Phone', 
-    'Holder Phone', 'Tel', 'Telephone', '电话', 'Fax'
+    'Holder Phone', 'Tel', 'Telephone', '电话', 'Registrant Tel',
+    'Registrant Contact Phone', 'phone-number', 'owner-phone'
+  ],
+  registrantFax: [
+    'Registrant Fax', 'Fax', 'Owner Fax', 'Holder Fax', 
+    'Registrant Fax Number', 'fax-no'
   ],
   registrantAddress: [
     'Registrant Street', 'Adresse', 'Address', 'Street', 
-    'Registrant Address', 'Owner Address', '地址'
+    'Registrant Address', 'Owner Address', '地址',
+    'Registrant Street Address', 'address1', 'Street1'
   ],
   registrantCity: [
-    'Registrant City', 'Ville', 'City', 'Owner City', '城市'
+    'Registrant City', 'Ville', 'City', 'Owner City', '城市',
+    'Registrant Address City', 'city'
   ],
   registrantState: [
     'Registrant State/Province', 'State', 'Province', 
-    'Registrant State', '省份'
+    'Registrant State', '省份', 'State/Province',
+    'Registrant Province', 'state-province'
   ],
   registrantPostalCode: [
     'Registrant Postal Code', 'Postal Code', 'ZIP', 'Postcode',
-    'ZIP Code', '邮编'
+    'ZIP Code', '邮编', 'Registrant Postalcode', 'postal-code'
   ],
   registrantCountry: [
     'Registrant Country', 'Pays', 'Country', 'Owner Country', 
-    'Country Code', '国家'
+    'Country Code', '国家', 'Registrant Country/Economy',
+    'country-code', 'Registrant Address Country'
   ],
-  registrantType: ['Type', 'Registrant Type', 'Owner Type'],
-  registrantId: ['Registrant ID', 'ID Contact', 'Holder ID', 'Owner ID'],
+  registrantType: ['Type', 'Registrant Type', 'Owner Type', 'Entity Type'],
+  registrantId: ['Registrant ID', 'ID Contact', 'Holder ID', 'Owner ID', 'Contact ID'],
   
   // 管理联系人
-  adminName: ['Admin Name', 'Administrative Contact Name', 'Admin Contact'],
-  adminOrg: ['Admin Organization', 'Administrative Contact Organization'],
-  adminEmail: ['Admin Email', 'Administrative Contact Email'],
-  adminPhone: ['Admin Phone', 'Administrative Contact Phone'],
-  adminId: ['Admin ID', 'Administrative Contact ID'],
+  adminName: ['Admin Name', 'Administrative Contact Name', 'Admin Contact', 'Admin-Name'],
+  adminOrg: ['Admin Organization', 'Administrative Contact Organization', 'Admin-Organization'],
+  adminEmail: ['Admin Email', 'Administrative Contact Email', 'Admin-Email'],
+  adminPhone: ['Admin Phone', 'Administrative Contact Phone', 'Admin-Phone'],
+  adminId: ['Admin ID', 'Administrative Contact ID', 'Admin-ID'],
   
   // 技术联系人
-  techName: ['Tech Name', 'Technical Contact Name', 'Tech Contact'],
-  techOrg: ['Tech Organization', 'Technical Contact Organization'],
-  techEmail: ['Tech Email', 'Technical Contact Email'],
-  techPhone: ['Tech Phone', 'Technical Contact Phone'],
-  techId: ['Tech ID', 'Technical Contact ID'],
+  techName: ['Tech Name', 'Technical Contact Name', 'Tech Contact', 'Tech-Name'],
+  techOrg: ['Tech Organization', 'Technical Contact Organization', 'Tech-Organization'],
+  techEmail: ['Tech Email', 'Technical Contact Email', 'Tech-Email'],
+  techPhone: ['Tech Phone', 'Technical Contact Phone', 'Tech-Phone'],
+  techId: ['Tech ID', 'Technical Contact ID', 'Tech-ID'],
   
   status: [
     'Domain Status', 'Statut', 'Status', 'State', 'Domain State',
-    '状态', 'Registration Status'
+    '状态', 'Registration Status', 'Domain status', 'status',
+    'EPP Status', 'flags', 'Domain-Status'
   ],
   nameServer: [
     'Name Server', 'Serveur DNS', 'nserver', 'NS', 'Nameserver',
-    'Name Servers', 'DNS', 'DNS Servers', 'Hostname', 'Server Name'
+    'Name Servers', 'DNS', 'DNS Servers', 'Hostname', 'Server Name',
+    'name server', 'nameservers', 'DNS Server', 'NS Record',
+    'Nameservers', 'Name-Server', 'nServer', 'host name',
+    'dns1', 'dns2', 'dns3', 'dns4', 'dns5', 'ns1', 'ns2', 'ns3', 'ns4',
+    'Primary Nameserver', 'Secondary Nameserver', 'name_server'
   ],
   dnssec: [
-    'DNSSEC', 'DS Record', 'DNSSEC Status', 'Signed'
+    'DNSSEC', 'DS Record', 'DNSSEC Status', 'Signed', 'DNSSEC DS Data',
+    'dnssec', 'DNSSEC signed', 'DS', 'Delegation Signed'
   ],
 };
 
@@ -282,6 +338,10 @@ function extractField(raw: string, fieldNames: string[]): string | undefined {
       new RegExp(`^\\s*${escapeRegex(fieldName.toLowerCase().replace(/\s+/g, '-'))}\\s*:\\s*(.+?)\\s*$`, 'im'),
       // Tab分隔格式
       new RegExp(`^\\s*${escapeRegex(fieldName)}\\s*\\t+(.+?)\\s*$`, 'im'),
+      // 无冒号格式（字段名后直接跟值，用多个空格分隔）
+      new RegExp(`^\\s*${escapeRegex(fieldName)}[\\s.]+(.+?)\\s*$`, 'im'),
+      // 括号格式
+      new RegExp(`\\(${escapeRegex(fieldName)}\\)\\s*:\\s*(.+?)\\s*$`, 'im'),
     ];
     
     for (const pattern of patterns) {
@@ -305,6 +365,7 @@ function extractMultipleFields(raw: string, fieldNames: string[]): string[] {
       new RegExp(`^\\s*${escapeRegex(fieldName)}\\s*:?\\s*(.+?)\\s*$`, 'gim'),
       new RegExp(`^\\s*${escapeRegex(fieldName)}\\s{2,}(.+?)\\s*$`, 'gim'),
       new RegExp(`^\\s*${escapeRegex(fieldName)}\\s*\\t+(.+?)\\s*$`, 'gim'),
+      new RegExp(`^\\s*${escapeRegex(fieldName)}[\\s.]+(.+?)\\s*$`, 'gim'),
     ];
     
     for (const pattern of patterns) {
@@ -312,6 +373,26 @@ function extractMultipleFields(raw: string, fieldNames: string[]): string[] {
       while ((match = pattern.exec(raw)) !== null) {
         const value = cleanValue(match[1]);
         if (value && !results.some(r => r.toLowerCase() === value.toLowerCase())) {
+          results.push(value);
+        }
+      }
+    }
+  }
+  
+  // 尝试额外的 DNS 服务器提取方式
+  if (fieldNames.some(f => f.toLowerCase().includes('server') || f.toLowerCase().includes('ns'))) {
+    // 匹配常见的 DNS 服务器格式
+    const dnsPatterns = [
+      /(?:^|\s)(ns\d*\.[a-z0-9][a-z0-9.-]+\.[a-z]{2,})/gim,
+      /(?:^|\s)(dns\d*\.[a-z0-9][a-z0-9.-]+\.[a-z]{2,})/gim,
+      /(?:Name Server|Nameserver|nserver|NS)[\s:.]+([a-z0-9][a-z0-9.-]+\.[a-z]{2,})/gim,
+    ];
+    
+    for (const pattern of dnsPatterns) {
+      let match;
+      while ((match = pattern.exec(raw)) !== null) {
+        const value = match[1].trim().toLowerCase();
+        if (value && !results.some(r => r.toLowerCase() === value) && value.includes('.')) {
           results.push(value);
         }
       }
@@ -336,7 +417,9 @@ function cleanValue(value: string): string | undefined {
     'REDACTED FOR PRIVACY', 'REDACTED', 'Data Protected',
     'Please query the RDDS service', 'Contact Privacy Inc.',
     '***', '......', 'not disclosed', 'private', 'PRIVATE',
-    'Redacted for Privacy', 'DATA REDACTED'
+    'Redacted for Privacy', 'DATA REDACTED', 'Not Applicable',
+    'Not shown', 'Hidden', 'Protected', 'Withheld', 
+    'Registry Registrant ID', 'See RegistryTech ID'
   ];
   
   if (invalidValues.some(inv => cleaned.toLowerCase() === inv.toLowerCase())) {
@@ -347,7 +430,10 @@ function cleanValue(value: string): string | undefined {
   if (cleaned.toLowerCase().includes('redacted') && cleaned.length < 50) {
     return undefined;
   }
-  if (cleaned.toLowerCase().includes('privacy') && cleaned.length < 50) {
+  if (cleaned.toLowerCase().includes('privacy') && cleaned.length < 30) {
+    return undefined;
+  }
+  if (cleaned.toLowerCase().includes('protected') && cleaned.length < 30) {
     return undefined;
   }
   
@@ -361,63 +447,96 @@ function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function formatDate(dateStr: string | undefined): string | undefined {
-  if (!dateStr) return undefined;
+// 解析各种日期格式
+function parseDate(dateStr: string | undefined): Date | null {
+  if (!dateStr) return null;
   
   try {
-    // 移除时间部分的特殊字符
     let cleaned = dateStr.trim();
-    
-    // 处理多种日期格式
-    let date: Date | null = null;
     
     // ISO 格式 (2025-05-19T...)
     if (cleaned.includes('T') || /^\d{4}-\d{2}-\d{2}/.test(cleaned)) {
-      date = new Date(cleaned);
+      const d = new Date(cleaned);
+      if (!isNaN(d.getTime())) return d;
     }
+    
     // DD-Mon-YYYY 格式 (19-May-2025)
-    else if (/^\d{2}-[A-Za-z]{3}-\d{4}/.test(cleaned)) {
-      date = new Date(cleaned);
+    if (/^\d{1,2}-[A-Za-z]{3}-\d{4}/.test(cleaned)) {
+      const d = new Date(cleaned);
+      if (!isNaN(d.getTime())) return d;
     }
+    
     // YYYY-MM-DD 格式
-    else if (/^\d{4}-\d{2}-\d{2}/.test(cleaned)) {
-      date = new Date(cleaned);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(cleaned)) {
+      const d = new Date(cleaned + 'T00:00:00');
+      if (!isNaN(d.getTime())) return d;
     }
+    
     // DD/MM/YYYY 格式
-    else if (/^\d{2}\/\d{2}\/\d{4}/.test(cleaned)) {
+    if (/^\d{2}\/\d{2}\/\d{4}/.test(cleaned)) {
       const [day, month, year] = cleaned.split('/');
-      date = new Date(`${year}-${month}-${day}`);
+      const d = new Date(`${year}-${month}-${day}T00:00:00`);
+      if (!isNaN(d.getTime())) return d;
     }
+    
     // YYYY/MM/DD 格式
-    else if (/^\d{4}\/\d{2}\/\d{2}/.test(cleaned)) {
+    if (/^\d{4}\/\d{2}\/\d{2}/.test(cleaned)) {
       const [year, month, day] = cleaned.split('/');
-      date = new Date(`${year}-${month}-${day}`);
+      const d = new Date(`${year}-${month}-${day}T00:00:00`);
+      if (!isNaN(d.getTime())) return d;
     }
+    
     // DD.MM.YYYY 格式
-    else if (/^\d{2}\.\d{2}\.\d{4}/.test(cleaned)) {
+    if (/^\d{2}\.\d{2}\.\d{4}/.test(cleaned)) {
       const [day, month, year] = cleaned.split('.');
-      date = new Date(`${year}-${month}-${day}`);
+      const d = new Date(`${year}-${month}-${day}T00:00:00`);
+      if (!isNaN(d.getTime())) return d;
     }
+    
     // YYYYMMDD 格式
-    else if (/^\d{8}$/.test(cleaned)) {
+    if (/^\d{8}$/.test(cleaned)) {
       const year = cleaned.slice(0, 4);
       const month = cleaned.slice(4, 6);
       const day = cleaned.slice(6, 8);
-      date = new Date(`${year}-${month}-${day}`);
+      const d = new Date(`${year}-${month}-${day}T00:00:00`);
+      if (!isNaN(d.getTime())) return d;
     }
     
-    if (date && !isNaN(date.getTime())) {
-      return date.toLocaleDateString('zh-CN', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      });
+    // Mon DD YYYY 格式 (May 19 2025)
+    if (/^[A-Za-z]{3}\s+\d{1,2}\s+\d{4}/.test(cleaned)) {
+      const d = new Date(cleaned);
+      if (!isNaN(d.getTime())) return d;
     }
     
-    return cleaned;
+    // DD Mon YYYY 格式 (19 May 2025)
+    if (/^\d{1,2}\s+[A-Za-z]{3}\s+\d{4}/.test(cleaned)) {
+      const d = new Date(cleaned);
+      if (!isNaN(d.getTime())) return d;
+    }
+    
+    // 尝试直接解析
+    const d = new Date(cleaned);
+    if (!isNaN(d.getTime())) return d;
+    
+    return null;
   } catch {
-    return dateStr;
+    return null;
   }
+}
+
+function formatDate(dateStr: string | undefined): string | undefined {
+  if (!dateStr) return undefined;
+  
+  const date = parseDate(dateStr);
+  if (date) {
+    return date.toLocaleDateString('zh-CN', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  }
+  
+  return dateStr;
 }
 
 function extractSection(raw: string, sectionNames: string[]): string | undefined {
@@ -447,12 +566,11 @@ function detectAvailability(raw: string): {
   // 先检查是否有域名保护状态（这意味着域名已注册）
   for (const pattern of protectionStatuses) {
     if (pattern.test(raw)) {
-      // 有保护状态表示域名已注册，不是禁止注册
       return { availability: 'registered' };
     }
   }
   
-  // 检查是否有明显的已注册标志
+  // 检查是否有明显的已注册标志（更全面的检测）
   const registeredIndicators = [
     /domain\s*name\s*:/i,
     /registr(ar|ant)\s*:/i,
@@ -463,6 +581,14 @@ function detectAvailability(raw: string): {
     /registration\s+date/i,
     /status:\s*(active|ok)/i,
     /statut:\s*actif/i,
+    /domain\s+status:\s*ok/i,
+    /^domain:/im,
+    /^nserver:/im,
+    /Registry\s+Domain\s+ID/i,
+    /Registrar\s+IANA\s+ID/i,
+    /Domain\s+Create\s+Date/i,
+    /Updated\s+Date:/i,
+    /Sponsoring\s+Registrar/i,
   ];
   
   for (const pattern of registeredIndicators) {
@@ -491,7 +617,7 @@ function detectAvailability(raw: string): {
     }
   }
   
-  // 检查是否禁止注册（排除已经判断为已注册的情况）
+  // 检查是否禁止注册
   for (const pattern of availabilityPatterns.prohibited) {
     if (pattern.test(raw)) {
       return { 
@@ -512,62 +638,25 @@ function detectAvailability(raw: string): {
   return { availability: 'registered' };
 }
 
-function extractAdditionalFields(raw: string, existingKeys: Set<string>): Record<string, string> {
-  const additional: Record<string, string> = {};
-  
-  // 匹配所有 "Key: Value" 格式的行
-  const lines = raw.split('\n');
-  
-  for (const line of lines) {
-    // 跳过注释行和分隔线
-    if (/^[%#>]/.test(line.trim()) || /^[=\-]{3,}$/.test(line.trim())) {
-      continue;
-    }
-    
-    // 跳过空行
-    if (!line.trim()) continue;
-    
-    // 跳过包含 URL 的提示行
-    if (/^(For further|Tovabbi|see:|ld\.:)/i.test(line.trim())) {
-      continue;
-    }
-    
-    // 尝试提取键值对
-    const match = line.match(/^\s*([A-Za-z][A-Za-z0-9\s\-_.\/]*?)\s*:\s*(.+?)\s*$/);
-    if (match) {
-      const key = match[1].trim();
-      const value = cleanValue(match[2]);
-      
-      // 跳过已提取的字段和无效值
-      if (value && !existingKeys.has(key.toLowerCase())) {
-        // 转换为友好的显示名称
-        const displayKey = key
-          .replace(/([a-z])([A-Z])/g, '$1 $2')
-          .replace(/[_\-\.]+/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-        
-        if (displayKey.length > 2 && displayKey.length < 50) {
-          additional[displayKey] = value;
-        }
-      }
-    }
-  }
-  
-  return additional;
-}
-
 export function parseWhoisData(raw: string): WhoisData {
   // 检测域名可用性
   const { availability, message: availabilityMessage } = detectAvailability(raw);
+  
+  // 提取原始日期值
+  const creationDateRaw = extractField(raw, fieldMappings.creationDate);
+  const updatedDateRaw = extractField(raw, fieldMappings.updatedDate);
+  const expirationDateRaw = extractField(raw, fieldMappings.expirationDate);
   
   // 基本字段提取
   const result: WhoisData = {
     domainName: extractField(raw, fieldMappings.domainName),
     domainId: extractField(raw, fieldMappings.domainId),
-    creationDate: formatDate(extractField(raw, fieldMappings.creationDate)),
-    updatedDate: formatDate(extractField(raw, fieldMappings.updatedDate)),
-    expirationDate: formatDate(extractField(raw, fieldMappings.expirationDate)),
+    creationDate: formatDate(creationDateRaw),
+    creationDateRaw,
+    updatedDate: formatDate(updatedDateRaw),
+    updatedDateRaw,
+    expirationDate: formatDate(expirationDateRaw),
+    expirationDateRaw,
     status: extractMultipleFields(raw, fieldMappings.status),
     availability,
     availabilityMessage,
@@ -578,6 +667,7 @@ export function parseWhoisData(raw: string): WhoisData {
       email: extractField(raw, fieldMappings.registrarEmail),
       phone: extractField(raw, fieldMappings.registrarPhone),
       id: extractField(raw, fieldMappings.registrarId),
+      whoisServer: extractField(raw, fieldMappings.registrarWhoisServer),
     },
     
     registrant: {
@@ -586,6 +676,7 @@ export function parseWhoisData(raw: string): WhoisData {
       organization: extractField(raw, fieldMappings.registrantOrg),
       email: extractField(raw, fieldMappings.registrantEmail),
       phone: extractField(raw, fieldMappings.registrantPhone),
+      fax: extractField(raw, fieldMappings.registrantFax),
       address: extractField(raw, fieldMappings.registrantAddress),
       city: extractField(raw, fieldMappings.registrantCity),
       state: extractField(raw, fieldMappings.registrantState),
@@ -643,76 +734,98 @@ export function parseWhoisData(raw: string): WhoisData {
     result.billingContact = undefined;
   }
   
-  // 提取额外的未匹配字段
-  const usedKeys = new Set([
-    ...Object.values(fieldMappings).flat().map(k => k.toLowerCase())
-  ]);
-  result.additionalFields = extractAdditionalFields(raw, usedKeys);
+  // 清理空的 nameServers 数组
+  if (result.nameServers && result.nameServers.length === 0) {
+    result.nameServers = undefined;
+  }
   
-  // 如果额外字段为空，删除
-  if (Object.keys(result.additionalFields).length === 0) {
-    result.additionalFields = undefined;
+  // 清理空的 status 数组
+  if (result.status && result.status.length === 0) {
+    result.status = undefined;
   }
   
   return result;
 }
 
 // 获取状态的友好显示名称和颜色
-export function getStatusInfo(status: string): { label: string; color: 'green' | 'yellow' | 'red' | 'gray' } {
-  const statusLower = status.toLowerCase();
+export function getStatusInfo(status: string): { label: string; color: 'green' | 'blue' | 'yellow' | 'red' | 'gray'; description: string } {
+  const statusLower = status.toLowerCase().replace(/[\s-]/g, '');
   
   // 活跃状态
   if (statusLower.includes('active') || statusLower === 'actif' || statusLower.includes('ok')) {
-    return { label: '活跃', color: 'green' };
+    return { label: '活跃', color: 'green', description: '域名状态正常' };
   }
   
-  // 待处理状态
-  if (statusLower.includes('pending')) {
-    if (statusLower.includes('delete')) return { label: '待删除', color: 'red' };
-    if (statusLower.includes('transfer')) return { label: '转移中', color: 'yellow' };
-    if (statusLower.includes('create')) return { label: '创建中', color: 'yellow' };
-    if (statusLower.includes('renew')) return { label: '续费中', color: 'yellow' };
-    if (statusLower.includes('update')) return { label: '更新中', color: 'yellow' };
-    return { label: '待处理', color: 'yellow' };
+  // 保护状态（蓝色，表示正面的保护措施）
+  if (statusLower.includes('clienttransferprohibited')) {
+    return { label: '禁止转移', color: 'blue', description: '注册商已锁定该域名，禁止转移至其他注册商' };
+  }
+  if (statusLower.includes('clientdeleteprohibited')) {
+    return { label: '禁止删除', color: 'blue', description: '注册商已锁定该域名，禁止删除' };
+  }
+  if (statusLower.includes('clientupdateprohibited')) {
+    return { label: '禁止更新', color: 'blue', description: '注册商已锁定该域名，禁止修改信息' };
+  }
+  if (statusLower.includes('clientrenewprohibited')) {
+    return { label: '禁止续费', color: 'yellow', description: '注册商已锁定该域名，禁止续费' };
+  }
+  if (statusLower.includes('servertransferprohibited')) {
+    return { label: '服务器禁止转移', color: 'blue', description: '注册局已锁定该域名，禁止转移' };
+  }
+  if (statusLower.includes('serverdeleteprohibited')) {
+    return { label: '服务器禁止删除', color: 'blue', description: '注册局已锁定该域名，禁止删除' };
+  }
+  if (statusLower.includes('serverupdateprohibited')) {
+    return { label: '服务器禁止更新', color: 'blue', description: '注册局已锁定该域名，禁止修改' };
   }
   
-  // 过期/赎回状态
-  if (statusLower.includes('expired') || statusLower.includes('redemption')) {
-    return { label: '已过期', color: 'red' };
+  // 暂停状态
+  if (statusLower.includes('serverhold')) {
+    return { label: '服务器暂停', color: 'red', description: '注册局暂停了该域名的解析' };
+  }
+  if (statusLower.includes('clienthold')) {
+    return { label: '客户端暂停', color: 'red', description: '注册商暂停了该域名的解析' };
   }
   
-  // 域名保护状态（这些是积极的保护措施）
-  if (statusLower.includes('clienttransferprohibited') || statusLower.includes('servertransferprohibited')) {
-    return { label: '禁止转移', color: 'green' };
+  // 待定状态
+  if (statusLower.includes('pendingdelete')) {
+    return { label: '待删除', color: 'red', description: '域名处于待删除状态' };
   }
-  if (statusLower.includes('clientdeleteprohibited') || statusLower.includes('serverdeleteprohibited')) {
-    return { label: '禁止删除', color: 'green' };
+  if (statusLower.includes('pendingtransfer')) {
+    return { label: '转移中', color: 'yellow', description: '域名正在转移中' };
   }
-  if (statusLower.includes('clientupdateprohibited') || statusLower.includes('serverupdateprohibited')) {
-    return { label: '禁止更新', color: 'green' };
+  if (statusLower.includes('pendingrenew')) {
+    return { label: '续费中', color: 'yellow', description: '域名正在续费中' };
   }
-  if (statusLower.includes('clienthold') || statusLower.includes('serverhold')) {
-    return { label: '暂停解析', color: 'red' };
+  if (statusLower.includes('pendingcreate')) {
+    return { label: '创建中', color: 'yellow', description: '域名正在创建中' };
   }
-  if (statusLower.includes('clientrenewprohibited') || statusLower.includes('serverrenewprohibited')) {
-    return { label: '禁止续费', color: 'red' };
-  }
-  
-  // 其他状态
-  if (statusLower.includes('autorenew')) {
-    return { label: '自动续费', color: 'green' };
-  }
-  if (statusLower.includes('lock')) {
-    return { label: '已锁定', color: 'green' };
-  }
-  if (statusLower.includes('connect')) {
-    return { label: '已连接', color: 'green' };
+  if (statusLower.includes('pendingupdate')) {
+    return { label: '更新中', color: 'yellow', description: '域名信息正在更新中' };
   }
   
-  return { label: status, color: 'gray' };
+  // 宽限期
+  if (statusLower.includes('redemptionperiod')) {
+    return { label: '赎回期', color: 'red', description: '域名处于赎回期，需要支付赎回费用' };
+  }
+  if (statusLower.includes('autorenewperiod')) {
+    return { label: '自动续费期', color: 'yellow', description: '域名处于自动续费宽限期' };
+  }
+  if (statusLower.includes('addperiod')) {
+    return { label: '新增宽限期', color: 'green', description: '域名处于新注册宽限期' };
+  }
+  if (statusLower.includes('renewperiod')) {
+    return { label: '续费宽限期', color: 'yellow', description: '域名处于续费宽限期' };
+  }
+  if (statusLower.includes('transferperiod')) {
+    return { label: '转移宽限期', color: 'yellow', description: '域名处于转移后宽限期' };
+  }
+  
+  // 默认
+  return { label: status, color: 'gray', description: '' };
 }
 
-// 获取域名可用性的显示信息
+// 获取域名可用性信息
 export function getAvailabilityInfo(availability: WhoisData['availability']): {
   title: string;
   description: string;
@@ -722,39 +835,91 @@ export function getAvailabilityInfo(availability: WhoisData['availability']): {
   switch (availability) {
     case 'available':
       return {
-        title: '域名可注册',
-        description: '此域名当前未被注册，您可以立即注册',
+        title: '可以注册',
+        description: '此域名当前可以注册，快去抢注吧！',
         color: 'green',
-        icon: 'check',
-      };
-    case 'reserved':
-      return {
-        title: '域名已保留',
-        description: '此域名已被保留，可能需要特殊渠道或满足特定条件才能注册',
-        color: 'yellow',
-        icon: 'alert',
-      };
-    case 'prohibited':
-      return {
-        title: '域名禁止注册',
-        description: '此域名由于政策或技术原因禁止注册',
-        color: 'red',
-        icon: 'ban',
+        icon: 'check'
       };
     case 'registered':
       return {
-        title: '域名已注册',
+        title: '已注册',
         description: '此域名已被注册',
         color: 'blue',
-        icon: 'x',
+        icon: 'x'
       };
-    case 'unknown':
+    case 'reserved':
+      return {
+        title: '保留域名',
+        description: '此域名已被保留，可能需要特殊申请或无法注册',
+        color: 'yellow',
+        icon: 'alert'
+      };
+    case 'prohibited':
+      return {
+        title: '禁止注册',
+        description: '此域名禁止注册',
+        color: 'red',
+        icon: 'ban'
+      };
     default:
       return {
         title: '状态未知',
-        description: '无法确定此域名的注册状态',
+        description: '无法确定此域名的当前状态',
         color: 'gray',
-        icon: 'help',
+        icon: 'help'
       };
   }
+}
+
+// 计算相对时间
+export function getRelativeTime(dateStr: string): { text: string; isPast: boolean; days: number } {
+  try {
+    // 尝试解析中文日期格式 "2025年5月19日"
+    const chineseMatch = dateStr.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/)
+    let date: Date
+    
+    if (chineseMatch) {
+      date = new Date(parseInt(chineseMatch[1]), parseInt(chineseMatch[2]) - 1, parseInt(chineseMatch[3]))
+    } else {
+      const parsed = parseDate(dateStr)
+      if (!parsed) return { text: '', isPast: true, days: 0 }
+      date = parsed
+    }
+    
+    if (isNaN(date.getTime())) return { text: '', isPast: true, days: 0 }
+    
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffDays = Math.floor(Math.abs(diffMs) / (1000 * 60 * 60 * 24))
+    const isPast = diffMs > 0
+    
+    if (diffDays < 1) return { text: '今天', isPast, days: diffDays }
+    if (diffDays < 30) return { text: isPast ? `${diffDays} 天前` : `剩余 ${diffDays} 天`, isPast, days: diffDays }
+    if (diffDays < 365) {
+      const months = Math.floor(diffDays / 30)
+      return { text: isPast ? `${months} 个月前` : `剩余 ${months} 个月`, isPast, days: diffDays }
+    }
+    const years = Math.floor(diffDays / 365)
+    const remainingDays = diffDays % 365
+    if (isPast) {
+      return { text: `${years} 年前`, isPast, days: diffDays }
+    } else {
+      return { text: `剩余 ${diffDays} 天`, isPast, days: diffDays }
+    }
+  } catch {
+    return { text: '', isPast: true, days: 0 }
+  }
+}
+
+// 计算域名年龄
+export function getDomainAge(creationDate: string): string {
+  const result = getRelativeTime(creationDate)
+  if (!result.text || !result.isPast) return ''
+  
+  const years = Math.floor(result.days / 365)
+  if (years < 1) {
+    const months = Math.floor(result.days / 30)
+    return months > 0 ? `${months} 个月` : `${result.days} 天`
+  }
+  return `${years} 年`
 }
