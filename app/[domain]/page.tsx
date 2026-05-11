@@ -1,5 +1,4 @@
-import Header from '@/components/header'
-import WhoisResult from '@/components/whois-result'
+import WhoisPageClient from '@/components/whois-page-client'
 import { whois } from '@/lib/whois'
 import { parseWhoisData } from '@/lib/whois-parser'
 import { unstable_cache } from 'next/cache'
@@ -17,12 +16,5 @@ export default async function Page({
 
   const parsedData = parseWhoisData(rawData)
 
-  return (
-    <>
-      <Header />
-      <main className="max-w-3xl mx-auto p-4 pb-8">
-        <WhoisResult data={parsedData} domain={domain} />
-      </main>
-    </>
-  )
+  return <WhoisPageClient data={parsedData} domain={domain} />
 }
